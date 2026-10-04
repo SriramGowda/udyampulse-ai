@@ -1,0 +1,4 @@
+model,accuracy,macro_f1,high_risk_recall
+Baseline Balanced,0.916,0.8383811505539254,0.625
+Stronger High Risk,0.914,0.8309121109561565,0.625
+High Risk Emphasis,0.92,0.8334071139647685,0.6041666666666666

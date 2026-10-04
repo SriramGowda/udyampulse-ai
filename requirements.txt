@@ -1,0 +1,9 @@
+streamlit>=1.49
+pandas
+numpy
+plotly
+joblib
+scikit-learn
+shap
+google-genai>=1.0
+python-dotenv
