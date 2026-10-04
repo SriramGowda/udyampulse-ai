@@ -121,7 +121,7 @@ class RetrievalTests(unittest.TestCase):
         client.models.generate_content.assert_called_once()
         self.assertEqual(
             client.models.generate_content.call_args.kwargs["model"],
-            os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+            os.getenv("GEMINI_MODEL", "gemini-3.8-flash"),
         )
 
 

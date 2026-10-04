@@ -35,7 +35,7 @@ def _generate_gemini(prompt, api_key=None):
 
         client = genai.Client(api_key=api_key)
         response = client.models.generate_content(
-            model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+            model=os.getenv("GEMINI_MODEL", "gemini-3.8-flash"),
             contents=prompt,
         )
         answer = response.text
