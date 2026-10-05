@@ -1,4 +1,3 @@
-streamlit>=1.49
 pandas
 numpy
 plotly
@@ -7,3 +6,5 @@ scikit-learn
 shap
 google-genai>=1.0
 python-dotenv
+fastapi>=0.115
+uvicorn[standard]>=0.34
