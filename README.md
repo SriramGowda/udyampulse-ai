@@ -1,140 +1,340 @@
 # UdyamPulse AI
 
-UdyamPulse AI is a professional financial analytics demonstration for synthetic MSME records. It pairs a React/TypeScript dashboard and FastAPI REST API with the existing financial KPI, Random Forest risk, Isolation Forest anomaly, SHAP and forecast implementations, plus optional Gemini and offline Ollama/RAG support.
+**Predictive Financial Analytics & Compliance Intelligence Platform for MSMEs**
 
-> **Academic demonstration only:** all included financial data is synthetic. This app is not a credit decision, financial advice, or official compliance guidance.
+UdyamPulse AI is an academic decision-support prototype that brings synthetic MSME financial analytics, risk classification, forecasting, anomaly detection, model explanations, and local-document question answering into one web application.
 
-## Architecture
+> **Academic use only.** The included dataset is synthetic and the risk labels are rule-generated proxies, not observed credit outcomes. Metrics do not establish performance on real businesses. Do not use this application for lending, financial advice, or authoritative compliance decisions.
+
+**Project:** B.Tech Computer Science and Engineering, Dayananda Sagar University
+
+**Deployment:** No public deployment is configured.
+
+## Contents
+
+- [Problem and objectives](#problem-and-objectives)
+- [Implemented features and stack](#implemented-features-and-stack)
+- [Architecture and repository structure](#architecture-and-repository-structure)
+- [Dataset and financial indicators](#dataset-and-financial-indicators)
+- [Risk target, features, and evaluation](#risk-target-features-and-evaluation)
+- [Forecasting, anomaly detection, and SHAP](#forecasting-anomaly-detection-and-shap)
+- [Generative AI and document retrieval](#generative-ai-and-document-retrieval)
+- [Screenshots](#screenshots)
+- [API](#api)
+- [Setup and configuration](#setup-and-configuration)
+- [Reproducing the analysis](#reproducing-the-analysis)
+- [Tests and verification](#tests-and-verification)
+- [Limitations and future work](#limitations-and-future-work)
+
+## Problem and objectives
+
+MSME teams often need a concise view of revenue, expenses, cash, debt, and working-capital patterns. This prototype demonstrates how these indicators can be explored alongside:
+
+- a transparent, rule-created future-stress target and a Random Forest classifier;
+- six-month revenue and cash projections;
+- unusual-pattern detection and feature-level model explanations; and
+- retrieval of excerpts from a small local reference library.
+
+The application is intended to make an academic workflow inspectable and reproducible, not to replace domain experts or verified financial and compliance systems.
+
+## Implemented features and stack
+
+| Area | Implementation |
+|---|---|
+| Web client | React 19, TypeScript, Vite 8, Tailwind CSS, Recharts, Lucide |
+| API | Python, FastAPI, Pydantic |
+| Data | Pandas, NumPy |
+| Risk classification | Scikit-learn Random Forest |
+| Anomaly detection | Scikit-learn `StandardScaler` and Isolation Forest |
+| Explainability | Tree SHAP |
+| Forecasting | Per-business damped linear trend |
+| Text generation | Google Gen AI SDK; optional local Ollama |
+| Document retrieval | Scikit-learn TF-IDF and cosine similarity |
+| Tests | Python `unittest`; frontend Oxlint and TypeScript/Vite build |
+
+The UI includes a dashboard, business analysis, risk intelligence, forecasting, anomaly detection, AI insights, compliance assistant, and CSV reports.
+
+## Architecture and repository structure
+
+The Vite client calls the FastAPI JSON API. The API combines the shared data/forecasting service, saved model artifacts, and AI/RAG services. Gemini and Ollama are optional generation providers; dataset analytics and local document retrieval are implemented locally.
 
 ```text
-frontend/                         React + TypeScript + Vite + Tailwind
-  src/components/                 Shared cards, states, tables and charts
-  src/pages/                      Dashboard and seven analytics/assistant pages
-  src/services/api.ts             Browser-to-API client (no secrets)
-  src/hooks/                      API loading and error states
-  src/layouts/                    Responsive navigation and business selector
-backend/
-  main.py                         FastAPI app, CORS and error handling
-  routes/api.py                   JSON REST endpoints
-  services/analytics.py           Loads and invokes the existing saved models
-services/
-  data_service.py                  Existing KPIs and forecasts
-  ai_service.py                    Gemini-first provider orchestration
-  local_llm_service.py             Local-only Ollama detection and inference
-  rag_service.py                   Local document loading, chunking and retrieval
-models/                            Existing saved Random Forest / Isolation Forest
-data/raw/                          Synthetic monthly MSME financial records
-documents/                         Local TXT/MD RAG references
+.
+├── backend/
+│   ├── main.py                         # FastAPI app and CORS configuration
+│   ├── routes/api.py                   # /api routes and request models
+│   └── services/analytics.py           # Model loading, inference, and SHAP
+├── data/
+│   ├── raw/msme_financial_data.csv      # Synthetic monthly input dataset
+│   └── processed/                      # Targets, splits, and evaluation outputs
+├── documents/                          # Local TXT references for the assistant
+├── docs/screenshots/                   # Captures from the running local UI
+├── frontend/
+│   ├── package.json
+│   └── src/
+│       ├── App.tsx                     # Client routes
+│       ├── pages/Pages.tsx              # Dashboard and feature pages
+│       └── services/api.ts              # Browser API client
+├── models/
+│   ├── financial_risk_model.pkl
+│   └── anomaly_detection_model.pkl
+├── notebooks/                          # Numbered analysis and model scripts
+├── services/
+│   ├── data_service.py                 # Data, KPIs, target, and forecast
+│   ├── ai_service.py                   # Provider orchestration and RAG
+│   ├── local_llm_service.py            # Loopback Ollama integration
+│   └── rag_service.py                  # Local document chunking/retrieval
+├── tests/
+├── generate_dataset.py
+├── requirements.txt
+└── OFFICIAL_SOURCES_CHECKLIST.md
 ```
 
-The backend reuses `services/data_service.py` for KPIs and forecasts and the existing model artifacts in `models/`. The React app calls only FastAPI. Provider credentials remain backend-only and are never sent to the browser.
+The application entry point is `backend.main:app`. The backend loads `data/raw/msme_financial_data.csv` and the two model artifacts from `models/`; these files are present in this repository.
 
-### RAG and provider architecture
+## Dataset and financial indicators
 
-Compliance queries follow this pipeline:
+The tracked raw file, [`data/raw/msme_financial_data.csv`](data/raw/msme_financial_data.csv), contains **3,600 rows**: 100 synthetic business IDs with 36 monthly observations each, from October 2023 through September 2026. All records are in the Manufacturing sector. The generated records are not real business accounts.
+
+Source columns include employee count, revenue, expenses, cash balance, receivables, payables, inventory, loan EMI, and outstanding loan. The KPI and feature calculations in [`services/data_service.py`](services/data_service.py) and [`notebooks/05_prepare_ml_dataset.py`](notebooks/05_prepare_ml_dataset.py) use these project-specific definitions:
+
+| Indicator | Formula |
+|---|---|
+| Profit | Revenue − expenses |
+| Profit margin (%) | Profit / revenue × 100 |
+| Revenue growth (%) | (current revenue − previous-month revenue) / previous-month revenue × 100 |
+| Expense growth (%) | (current expenses − previous-month expenses) / previous-month expenses × 100 |
+| Working capital | Receivables + inventory value − payables |
+| Cash ratio | Cash balance / current-period expenses |
+| Receivable ratio | Receivables / revenue |
+| Payable ratio | Payables / expenses |
+| Debt-service ratio | Loan EMI / revenue |
+| Inventory ratio | Inventory value / revenue |
+
+Here, **cash ratio** is the implementation's project-specific name for cash balance divided by expenses; it is not asserted to be a standard accounting cash-ratio definition.
+
+## Risk target, features, and evaluation
+
+### Target definition
+
+[`services/data_service.py`](services/data_service.py) implements `create_risk_target`; [`notebooks/04_risk_target_design.py`](notebooks/04_risk_target_design.py) calls it with a fixed three-month horizon. For a business at month *t*, it averages the corresponding indicator for *t+1*, *t+2*, and *t+3*. The future indicators are used to create the label, not supplied to the model as features.
 
 ```text
-documents/*.txt, *.md
-  -> chunk locally
-  -> TF-IDF vectors
-  -> cosine-similarity ranking
-  -> relevant excerpts + source filenames
-  -> Gemini (when configured and responding)
-  -> Ollama local LLM (when the local runtime and model are ready)
-  -> retrieved-document fallback (always local)
+future_mean(x) = mean(x[t+1], x[t+2], x[t+3])
+
+flag_profit       = future_mean(profit_margin) < 10%
+flag_cash_decline = (future_mean(cash_balance) - cash_balance[t])
+                    / cash_balance[t] * 100 < -15%
+flag_revenue_drop = (future_mean(revenue) - revenue[t])
+                    / revenue[t] * 100 < -10%
+flag_receivables  = future_mean(accounts_receivable / revenue) > 0.30
+flag_debt_service = future_mean(loan_emi / revenue) > 0.12
+
+stress_score = sum(the five flags)
+LOW    = 0 flags
+MEDIUM = 1 flag
+HIGH   = 2 or more flags
 ```
 
-TF-IDF/cosine similarity is the document retrieval method; Ollama is the local text-generation runtime. Generated explanation and retrieved document information are returned separately so a quoted passage is not mistaken for generated advice. The two local references are `documents/msme_finance_reference_1.txt` and `documents/msme_finance_reference_2.txt`.
+The inequalities are strict: a value exactly at a threshold does not trigger that flag. The thresholds are hard-coded in the target function; only the horizon is a function argument, and the target-generation script currently supplies `3`. Records without the required future averages are dropped, so the final three observations per business cannot be labeled. The target-generation notebook checks for duplicate business-month records and consecutive monthly observations. There is no separate target class for a zero denominator: the change formulas divide by current cash and revenue directly. The current synthetic data has no zero revenue, expense, or cash denominators.
 
-Provider order for text generation is Gemini, then a local Ollama model, then a retrieval-only answer for compliance. AI Insights retains a deterministic local financial summary if neither language model is usable; that is an analytical fallback, not LLM generation. Provider outages and missing optional configuration do not prevent the analytics API or local retrieval from working.
+These deterministic labels represent the project's future-stress rules, not default, insolvency, or externally validated risk categories.
 
-## Prerequisites
+### Features and leakage controls
 
-- Python 3.10+ (the checked project environment uses Python 3.13)
-- Node.js 20.19+ or 22.12+
-- The existing model artifacts under `models/`
+The model uses the following **21 current-month features**, in the same order during training and API inference:
 
-## Install and run
+```text
+employee_count, revenue, expenses, cash_balance, accounts_receivable,
+accounts_payable, inventory_value, loan_emi, loan_outstanding,
+profit, profit_margin, working_capital, cash_ratio, receivable_ratio,
+payable_ratio, debt_service_ratio, inventory_ratio,
+revenue_growth, expense_growth, cash_growth, receivable_growth
+```
 
-From the project root in PowerShell:
+Raw financial values are from month *t*. Profit, margin, working capital, and the ratios use the formulas above; growth features compare the current month with the preceding row for the same business. Neither future target measures nor `risk_label`, `risk_target`, or other target-generation columns are in the selected feature list. The preparation and evaluation scripts explicitly reject future/target-named features. The inference list in [`backend/services/analytics.py`](backend/services/analytics.py) matches the training feature names and ordering.
+
+For ordinary values in the included dataset, training and inference use the same feature definitions. One edge case remains for future data: training converts non-finite engineered feature values to missing and drops affected rows, while API inference substitutes `0.0` for a missing or zero denominator in ratio calculations. The current input dataset has no zero denominators, so this difference did not affect the reported evaluation; it should be reconciled before using other data.
+
+### Time split and model selection
+
+[`notebooks/05_prepare_ml_dataset.py`](notebooks/05_prepare_ml_dataset.py) sorts by calendar month and creates an 80/20 chronological split, then purges three boundary months so training target windows end before later feature periods. The current [`ml_train.csv`](data/processed/ml_train.csv) and [`ml_test.csv`](data/processed/ml_test.csv) contain:
+
+| Partition | Period | Records | Use |
+|---|---|---:|---|
+| Model-fitting subset for validation | Nov 2023–Dec 2024 | 1,400 | Fit each candidate |
+| Purged validation-boundary months | Jan–Mar 2025 | 300 | Excluded from candidate fitting |
+| Validation | Apr–Aug 2025 | 500 | Select candidate |
+| Final training file | Nov 2023–Aug 2025 | 2,200 | Refit selected candidate |
+| Purged test-boundary months | Sep–Nov 2025 | 300 | Excluded at train/test boundary |
+| Final test | Dec 2025–Jun 2026 | 700 | Final held-out evaluation |
+
+Each month has 100 business records. The three-month gap is implemented by calendar-month comparisons in the preparation and evaluation scripts, not by a row-level random split. The evaluation script separately checks that the latest training target window precedes validation/test features.
+
+[`notebooks/07_evaluate_risk_model.py`](notebooks/07_evaluate_risk_model.py) compares three Random Forest configurations on the validation partition. Selection sorts by HIGH-risk recall first and macro F1 second; the **Baseline Balanced** candidate was selected. The selected model is then refit on all 2,200 rows in the final training file. The final test partition is not used in candidate selection.
+
+| Validation candidate | Accuracy | Macro F1 | HIGH recall |
+|---|---:|---:|---:|
+| Baseline Balanced (selected) | 0.8200 | 0.7441 | 0.5918 |
+| Stronger High Risk | 0.8440 | 0.7656 | 0.5714 |
+| High Risk Emphasis | 0.8440 | 0.7610 | 0.5510 |
+
+The validation values come from [`model_comparison.csv`](data/processed/model_comparison.csv). The saved final model is a Random Forest with 200 trees, `max_depth=10`, `class_weight="balanced"`, and `random_state=42`.
+
+### Final test results
+
+The following metrics were reproduced from [`financial_risk_model.pkl`](models/financial_risk_model.pkl) against [`ml_test.csv`](data/processed/ml_test.csv), using the metric definitions in the evaluation script. The final test metrics are printed by that script rather than saved as a dedicated report file.
+
+| Metric | Final test |
+|---|---:|
+| Test records | 700 |
+| Accuracy | 90.57% |
+| Macro F1 | 0.8309 |
+| HIGH-risk recall | 57.50% |
+| Actual HIGH records | 80 |
+| HIGH records predicted as HIGH | 46 |
+| Actual HIGH records missed | 34 |
+
+Confusion matrix (rows are actual labels; columns are predicted labels):
+
+| Actual \ Predicted | LOW | MEDIUM | HIGH |
+|---|---:|---:|---:|
+| LOW | 406 | 14 | 0 |
+| MEDIUM | 7 | 182 | 11 |
+| HIGH | 0 | 34 | 46 |
+
+Accuracy alone hides the missed HIGH cases. These measurements describe this synthetic, rule-labeled test split only; they do not establish real-world risk performance.
+
+## Forecasting, anomaly detection, and SHAP
+
+### Forecasting
+
+[`services/data_service.py`](services/data_service.py) fits revenue and cash balance **separately for each business**, using up to the 24 latest finite monthly observations. It fits a linear slope with `numpy.polyfit`, applies a 0.75 dampening factor from the last observed value, and clamps forecasts to zero or above. At least two valid historical values are required. The API returns six future monthly values for each series.
+
+Holdout evaluation is chronological: the last `min(6, number_of_rows // 4)` available observations are held out, and the trend is fit only on earlier values. If there is insufficient history, the service returns unavailable (`NaN`) metrics with zero holdout months. For **MSME001**, the current six-month holdout evaluation is:
+
+| Series | Holdout months | MAE | RMSE |
+|---|---:|---:|---:|
+| Revenue | 6 | Rs 107,802.78 | Rs 128,955.36 |
+| Cash balance | 6 | Rs 434,716.11 | Rs 472,643.82 |
+
+These are one synthetic business's chronological holdout errors, not an aggregate across businesses. The service output is reproducible with `evaluate_forecast` in [`services/data_service.py`](services/data_service.py).
+
+### Anomaly detection
+
+The saved [`anomaly_detection_model.pkl`](models/anomaly_detection_model.pkl) is used to score the 21 financial features. The training script [`notebooks/09_anomaly_detection.py`](notebooks/09_anomaly_detection.py) fits a `StandardScaler` followed by an Isolation Forest with 200 trees, `contamination=0.05`, and `random_state=42`, using the training partition. Prediction `-1` is returned as `ANOMALY`; `1` is `NORMAL`. The API also returns the decision-function score and the input indicators. This flags an unusual pattern, not confirmed financial distress; the configured contamination is a modeling assumption, not a measured distress rate.
+
+### SHAP explanations
+
+`AnalyticsService` applies `shap.TreeExplainer` to the saved Random Forest and the latest business record. The API returns the top 10 feature contributions for the predicted class, sorted by absolute contribution magnitude. Each entry contains the feature name, contribution value, and absolute impact. SHAP describes how the fitted model responds to its inputs; it does not establish causation or validate the underlying label.
+
+## Generative AI and document retrieval
+
+### Financial summaries
+
+The backend uses the Google Gen AI SDK (`google-genai`) and defaults to `gemini-3.5-flash-lite`, configurable with `GEMINI_MODEL`. The financial summary workflow is:
+
+1. Gemini, if `GEMINI_API_KEY` is configured and the request succeeds.
+2. A local Ollama model, if it is installed, running, and has the configured model.
+3. A deterministic local financial summary if neither generator returns an answer.
+
+Gemini retries a retryable 429/503 once only when its retry delay is at most two seconds. Missing credentials, quota/rate limits, network failures, and provider errors fall through to the next option. Ollama uses `http://127.0.0.1:11434`; `OLLAMA_MODEL` defaults to `llama3.2:3b`. No provider secret is returned by the status API or belongs in frontend `VITE_*` variables.
+
+### Compliance assistant (local RAG)
+
+[`services/rag_service.py`](services/rag_service.py) reads `.txt` and `.md` files directly from `documents/`, splits text into 160-word chunks with 30-word overlap, and ranks them using TF-IDF with English stop words and cosine similarity. It returns up to three positive-similarity passages. The sources and retrieved snippets are returned separately from the answer.
+
+For retrieved passages, answer generation tries Gemini, then Ollama. If neither is available, the assistant returns a retrieval-only explanation and the actual retrieved excerpts. If no relevant passage is found, it returns no sources and does not invoke a generator. The source attribution is based on filenames/chunks; similarity and generated citations do not prove that a source is official, current, complete, or legally authoritative.
+
+The local library includes [`msme_finance_reference_1.txt`](documents/msme_finance_reference_1.txt), [`msme_finance_reference_2.txt`](documents/msme_finance_reference_2.txt), and four named scheme/policy references. Verification limitations for some scheme details are recorded in [`OFFICIAL_SOURCES_CHECKLIST.md`](OFFICIAL_SOURCES_CHECKLIST.md). Check current requirements with the relevant authoritative source before relying on them.
+
+## Screenshots
+
+These screenshots were captured from the running local application with the included synthetic data on 21 October 2026. The compliance view shows a real local query and the passages/source filenames returned by the assistant.
+
+### Dashboard
+
+![UdyamPulse AI dashboard with synthetic business KPIs, risk status, and charts](docs/screenshots/dashboard.png)
+
+### Business risk and SHAP
+
+![Risk classification, probabilities, and top SHAP feature contributions for a synthetic business](docs/screenshots/risk-analysis.png)
+
+### Six-month forecasting
+
+![Revenue forecast, chronological holdout metrics, and projected monthly values](docs/screenshots/forecasting.png)
+
+### Compliance assistant
+
+![Local compliance assistant query with retrieved excerpts and source filenames](docs/screenshots/compliance-assistant.png)
+
+## API
+
+The router in [`backend/routes/api.py`](backend/routes/api.py) is mounted at `/api`. Interactive OpenAPI documentation is available at `/docs` while the backend is running.
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `GET` | `/api/health` | API and dataset readiness; reports whether Gemini is configured |
+| `GET` | `/api/ai/status` | Gemini configuration, local Ollama readiness, and retrieval availability |
+| `GET` | `/api/businesses` | Latest selector record for each business |
+| `GET` | `/api/business/{business_id}` | Latest record and monthly history |
+| `GET` | `/api/business/{business_id}/kpis` | Latest financial record and derived KPIs |
+| `GET` | `/api/business/{business_id}/risk` | Risk label, class probabilities, and explanation |
+| `GET` | `/api/business/{business_id}/anomaly` | Anomaly status, prediction, score, and indicators |
+| `GET` | `/api/business/{business_id}/shap` | Top 10 model feature contributions |
+| `GET` | `/api/business/{business_id}/forecast` | Six-month revenue/cash forecasts and holdout metrics |
+| `POST` | `/api/ai/summary` | Financial summary; JSON body: `{"business_id":"MSME001"}` |
+| `POST` | `/api/compliance/query` | Local-reference question; JSON body: `{"question":"..."}` |
+
+## Setup and configuration
+
+### Requirements
+
+- **Python 3.11 or newer.** There is no separate Python-version pin; `scikit-learn==1.8.0` declares Python `>=3.11`. The current checks used Python 3.13.2.
+- **Node.js `^20.19.0 || >=22.12.0`** for the locked Vite 8 toolchain. The current checks used Node 24.19.0.
+- npm, installed with Node.js.
+- The tracked dataset and model files listed above.
+
+### Install and start locally
+
+In a Windows PowerShell terminal at the repository root:
 
 ```powershell
-# Python environment and project dependencies
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
+python -m uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
+```
 
-# Backend API (terminal 1)
-uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
+In a second PowerShell terminal:
 
-# React frontend (terminal 2)
-cd frontend
-npm install
+```powershell
+Set-Location .\frontend
+npm ci
 npm run dev
 ```
 
-Open the Vite URL, normally `http://localhost:5173`. The API health endpoint is `http://127.0.0.1:8000/api/health`; interactive API documentation is available at `http://127.0.0.1:8000/docs`.
+Open the Vite URL shown in the terminal (normally `http://localhost:5173`). The API defaults to `http://localhost:8000`; set `VITE_API_URL` before starting Vite if the backend uses another address. The API's default CORS origins are `http://localhost:5173` and `http://127.0.0.1:5173`; configure `CORS_ORIGINS` on the backend if needed.
 
-## Frontend
+### Optional provider configuration
 
-The desktop-first responsive app includes:
+Core KPIs, saved-model predictions, forecasts, and local retrieval do not require Gemini credentials. Optional backend settings are:
 
-1. Dashboard
-2. Business Analysis
-3. Risk Intelligence
-4. Forecasting (revenue and cash tabs, MAE/RMSE, six-month table, CSV)
-5. Anomaly Detection
-6. AI Insights
-7. Compliance Assistant
-8. Reports (business history and forecast CSV exports)
+| Variable | Purpose | Default |
+|---|---|---|
+| `GEMINI_API_KEY` | Enables Gemini requests from the backend | Unset |
+| `GEMINI_MODEL` | Gemini model name | `gemini-3.5-flash-lite` |
+| `OLLAMA_MODEL` | Installed local Ollama model | `llama3.2:3b` |
+| `CORS_ORIGINS` | Comma-separated allowed frontend origins | Local Vite origins above |
+| `VITE_API_URL` | Frontend API base URL | `http://localhost:8000` |
 
-The frontend uses Recharts and Lucide icons. Set `VITE_API_URL` at build/dev time only if the API is not at `http://localhost:8000`. Do not place `GEMINI_API_KEY` or any backend secret in a `VITE_*` variable.
+Set credentials only in the backend environment or a private, Git-ignored root `.env` file. The root `.gitignore` excludes `.env`. Never commit credentials or put backend secrets in frontend variables.
 
-## Backend and API endpoints
+For optional Ollama generation, install and run Ollama separately and pull the configured model, for example `ollama pull llama3.2:3b`. The application does not download language models. If no language model is available, financial summaries use deterministic local analysis and compliance queries can return retrieved passages without generated answers.
 
-The FastAPI application loads configuration and secrets on the server. Default CORS origins are `http://localhost:5173` and `http://127.0.0.1:5173`; override them with a comma-separated `CORS_ORIGINS` setting for a deployment.
+## Reproducing the analysis
 
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| `GET` | `/api/health` | API, dataset and Gemini configuration status (boolean only; never returns credentials) |
-| `GET` | `/api/ai/status` | Safe provider, local Ollama/model and offline retrieval readiness |
-| `GET` | `/api/businesses` | Business selector options and latest periods |
-| `GET` | `/api/business/{business_id}` | Latest record and monthly history |
-| `GET` | `/api/business/{business_id}/kpis` | Latest financial record and calculated KPIs |
-| `GET` | `/api/business/{business_id}/risk` | Risk label, probabilities and model explanation |
-| `GET` | `/api/business/{business_id}/anomaly` | Latest anomaly status, score and indicator values |
-| `GET` | `/api/business/{business_id}/shap` | Top SHAP feature contributions |
-| `GET` | `/api/business/{business_id}/forecast` | Six-month revenue/cash forecasts and holdout metrics |
-| `POST` | `/api/ai/summary` | Financial explanation for `{ "business_id": "MSME001" }` |
-| `POST` | `/api/compliance/query` | Local-reference RAG for `{ "question": "..." }` |
-
-Unknown businesses return `404`, invalid requests return validation errors, and unexpected server exceptions are logged and return a generic `500` response.
-
-## Online Gemini mode
-
-Gemini is optional. To enable online generation, configure the Gemini credential in the backend process environment or a private, Git-ignored root `.env` file. The backend uses `GEMINI_MODEL` (default `gemini-3.5-flash-lite`). No endpoint returns credential values, and no `VITE_*` frontend variable should contain backend credentials. If Gemini has no configuration or a generation request fails, the request falls through to local Ollama generation and then the relevant local fallback. `/api/ai/status` reports configuration only; it does not make a live Gemini connectivity or credential check.
-
-## Offline mode and local model setup
-
-The React UI uses system fonts and does not require external font downloads. With FastAPI running, local financial data, KPI calculations, the existing Random Forest and Isolation Forest models, SHAP, forecasting and TF-IDF/cosine-similarity RAG do not depend on Gemini or internet access. Ollama provides local LLM generation when installed, running, and holding the configured model. If Ollama or its model is unavailable, compliance still returns retrieved-document fallback information with source filenames. **Do not describe retrieval fallback as LLM generation.**
-
-Install Ollama separately from [ollama.com](https://ollama.com), start the local Ollama service, then choose and download a model on the user's machine. The default is `llama3.2:3b`; the application does not download models automatically. After installing Ollama, run `ollama pull llama3.2:3b`, or set `OLLAMA_MODEL` in the backend environment to another installed model tag. The status endpoint checks the local Ollama tags endpoint and configured model name. Ollama inference is sent only to `127.0.0.1:11434`; it does not use an external model API.
-
-The safe provider status includes whether Gemini is configured (not a live service check), whether Ollama is installed/running, whether the configured model is available, whether local references are available, `offline_ready`, the model tag, and the preferred provider. `offline_ready` means a local model or local references are available; a local LLM specifically requires both Ollama and the configured model.
-
-## Existing ML/AI pipeline
-
-- **Financial KPIs:** `services/data_service.py` computes profitability, liquidity, growth, and working-capital measures.
-- **Risk:** the existing Random Forest model in `models/financial_risk_model.pkl` returns LOW/MEDIUM/HIGH class probabilities.
-- **Anomalies:** the existing Isolation Forest artifact in `models/anomaly_detection_model.pkl` scores the latest financial feature vector.
-- **Explanations:** Tree SHAP computes feature-level contributions to the risk prediction.
-- **Forecasting:** the existing data service fits a damped linear trend on up to 24 chronological observations, forecasts six months and evaluates a chronological holdout with MAE and RMSE.
-- **Financial explanation:** `services/ai_service.py` tries Gemini, then Ollama; if both are unavailable it returns the existing deterministic financial analysis, explicitly identified as a non-LLM fallback.
-- **Compliance RAG:** `services/rag_service.py` preserves local TXT/MD chunking, TF-IDF vectorization and cosine-similarity retrieval. `services/ai_service.py` passes only relevant excerpts to Gemini or Ollama and returns source filenames plus retrieved excerpts. If neither model is available, retrieved passages remain usable without generation.
-
-## Reproducible notebook scripts
-
-The scripts in [`notebooks/`](./notebooks/) are numbered in execution order. Run them from the project root after installing `requirements.txt`; each script resolves project files relative to its own location. Phase 02 writes offline-capable HTML charts under `data/processed/financial_eda/`.
+The numbered Python scripts in [`notebooks/`](notebooks/) run from the repository root in sequence:
 
 ```powershell
 python notebooks\01_eda_and_validation.py
@@ -152,39 +352,32 @@ python notebooks\12_generative_ai.py
 python notebooks\13_rag_assistant.py
 ```
 
-Phases 04–07 model a three-month future-risk horizon. Phase 05 excludes a three-month boundary gap so training-label outcomes cannot overlap validation/test feature periods; Phase 07 selects candidates on validation data and reports the final test results only after selection. Phase 12 uses the production Gemini → Ollama → deterministic-summary fallback. Phase 13 uses local TXT/MD references and clearly distinguishes retrieved excerpts from generated text.
+These scripts write or replace derived outputs under `data/processed/` and model artifacts under `models/`; inspect those outputs before rerunning the pipeline. The AI examples may use configured providers, while the analytics and retrieval scripts use local project data.
 
-## Tests and production build
+## Tests and verification
+
+From the repository root, run the Python tests:
 
 ```powershell
 python -m unittest discover -s tests -v
-Set-Location .\frontend
+```
+
+From `frontend/`, run:
+
+```powershell
+npm run lint
 npm run build
 ```
 
-The tests cover retrieval and citations, Gemini/local/retrieval fallback order, Ollama model detection and loopback-only requests, safe provider status, AI API routes, and the existing KPI, model/SHAP and forecast behavior. Provider generation is mocked; automated tests do not make real Gemini calls.
+**Verified in this checkout:** all 29 Python unit/API tests passed; frontend lint completed successfully; the production TypeScript/Vite build completed successfully. Provider tests use mocks for external generation, so they do not establish live Gemini availability.
 
-## Troubleshooting
+## Limitations and future work
 
-- **AI mode reports retrieval fallback:** local RAG remains available. Install and start Ollama, pull a model locally, and set `OLLAMA_MODEL` to the exact installed tag if offline LLM generation is desired.
-- **Gemini is configured but generation uses local mode:** status is configuration-only. A Gemini generation failure falls back to Ollama; check backend logs for the failure class and verify backend connectivity independently.
-- **The dashboard is unavailable offline:** start both FastAPI and Vite locally as shown above. The frontend requires its local FastAPI service.
-- **Model artifacts or data fail to load:** run the backend from the project root and retain `data/` and both existing artifacts under `models/`.
-- **CORS errors:** set `CORS_ORIGINS` to the local Vite origin(s) and restart FastAPI.
-
-## Limitations
-
-Local LLM generation requires the separately installed Ollama application, a running local service, and a manually downloaded compatible model; the application does not install or download one. The bundled local reference library is illustrative, limited to TXT/MD content, and may be incomplete or out of date. Retrieval fallback displays relevant excerpts without synthesizing an answer. Gemini and Ollama generated text may be inaccurate; verify important financial and compliance information with qualified professionals and official sources. The data is synthetic, the forecast is a simple damped trend, model probabilities inherit training assumptions, and SHAP explains model behavior rather than causation. Authentication, authorization and user-specific data isolation are not implemented; do not expose this demo API to untrusted users.
-
-## Viva questions
-
-1. Which financial indicators are used to calculate the risk target, and why is its target window in the future?
-2. How does the dashboard avoid using future observations when forecasting?
-3. What do MAE and RMSE measure, and why are they reported separately?
-4. How does an Isolation Forest identify an unusual record, and why is an anomaly not the same as high risk?
-5. What does a SHAP value explain for an individual prediction?
-6. How does TF-IDF represent document chunks, and how does cosine similarity rank them?
-7. Why should retrieved context constrain a RAG-generated response?
-8. What limitations follow from using synthetic data and a linear-trend forecast?
-9. What does the application do when the Gemini API key is missing or a request fails?
-10. Why should this dashboard not be used as official financial or compliance advice?
+- All included financial records and business identifiers are synthetic; there is no evaluation on real MSME outcomes.
+- Threshold-derived labels are a modeling exercise, not established credit-risk classes. HIGH recall on the held-out synthetic test set is 57.5%, with 34 of 80 HIGH records missed.
+- Forecasting is a simple trend baseline; anomaly flags are unusual-pattern indicators, not diagnoses.
+- SHAP contributions are explanations of model behavior, not causal effects.
+- Language-model output may be incorrect. Local RAG is limited to the included documents and does not browse the web or private databases.
+- Some scheme/policy references have documented verification gaps; retrieved content is not automatically authoritative or current.
+- The API has no authentication or user-specific data isolation and should not be exposed to untrusted users as configured.
+- Before broader use, reconcile train/inference denominator handling, validate on appropriately governed real data, assess data drift and subgroup performance, improve HIGH recall, and verify official references.
