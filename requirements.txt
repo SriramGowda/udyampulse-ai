@@ -2,7 +2,7 @@ pandas
 numpy
 plotly
 joblib
-scikit-learn
+scikit-learn==1.8.0
 shap
 google-genai>=1.0
 python-dotenv
