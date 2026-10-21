@@ -1,3 +1,10 @@
+"""UdyamPulse AI | Phase 07: select by validation, then evaluate once on test.
+
+Inputs: chronological data/processed/ml_train.csv and ml_test.csv
+Outputs: final Random Forest artifact and validation comparison CSV
+Method: purged chronological validation, high-risk recall then Macro F1 selection.
+"""
+
 import os
 import sys
 
@@ -46,6 +53,17 @@ TEST_PATH = os.path.join(
     "ml_test.csv"
 )
 
+TARGET_HORIZON_MONTHS = 3
+FEATURE_COLUMNS = [
+    "employee_count", "revenue", "expenses", "cash_balance",
+    "accounts_receivable", "accounts_payable", "inventory_value",
+    "loan_emi", "loan_outstanding", "profit", "profit_margin",
+    "working_capital", "cash_ratio", "receivable_ratio",
+    "payable_ratio", "debt_service_ratio", "inventory_ratio",
+    "revenue_growth", "expense_growth", "cash_growth",
+    "receivable_growth",
+]
+
 
 # --------------------------------------------------
 # Main
@@ -54,7 +72,7 @@ TEST_PATH = os.path.join(
 def main():
 
     print("=" * 70)
-    print("UDYAMPULSE AI - PHASE 2.4")
+    print("UDYAMPULSE AI - PHASE 07")
     print("MODEL EVALUATION & IMPROVEMENT")
     print("=" * 70)
 
@@ -77,17 +95,21 @@ def main():
     # Features
     # --------------------------------------------------
 
-    excluded_columns = [
-        "business_id",
-        "month",
-        "risk_target"
+    feature_columns = FEATURE_COLUMNS
+    forbidden_features = [
+        feature for feature in feature_columns
+        if any(term in feature.lower() for term in (
+            "future", "stress", "risk_label", "risk_target"
+        ))
     ]
-
-    feature_columns = [
-        column
-        for column in train_df.columns
-        if column not in excluded_columns
-    ]
+    if forbidden_features:
+        raise ValueError(f"Future/target leakage in model features: {forbidden_features}")
+    missing_columns = sorted(
+        set(feature_columns + ["risk_target"]).difference(train_df.columns)
+        | set(feature_columns + ["risk_target"]).difference(test_df.columns)
+    )
+    if missing_columns:
+        raise ValueError(f"Train/test data is missing required columns: {missing_columns}")
 
     # --------------------------------------------------
     # Chronological validation split
@@ -100,17 +122,34 @@ def main():
         train_df["month"].unique()
     )
 
+    if len(unique_train_months) < 2 * TARGET_HORIZON_MONTHS + 4:
+        raise ValueError(
+            "Not enough training months for a chronological validation split "
+            "with a target-horizon embargo."
+        )
+
     validation_start = int(
         len(unique_train_months) * 0.80
     )
 
-    model_train_months = unique_train_months[
-        :validation_start
-    ]
+    if validation_start <= 0 or validation_start >= len(unique_train_months):
+        raise ValueError("Unable to create non-empty chronological validation periods.")
 
     validation_months = unique_train_months[
         validation_start:
     ]
+    validation_start_month = pd.Timestamp(validation_months[0])
+    model_train_months = [
+        month for month in unique_train_months[:validation_start]
+        if pd.Timestamp(month)
+        < validation_start_month - pd.DateOffset(months=TARGET_HORIZON_MONTHS)
+    ]
+    purged_months = [
+        month for month in unique_train_months[:validation_start]
+        if month not in model_train_months
+    ]
+    if not model_train_months or not validation_months:
+        raise ValueError("Validation split has an empty partition after target-horizon embargo.")
 
     model_train = train_df[
         train_df["month"].isin(
@@ -123,6 +162,14 @@ def main():
             validation_months
         )
     ].copy()
+    if model_train["month"].max() + pd.DateOffset(
+        months=TARGET_HORIZON_MONTHS
+    ) >= validation["month"].min():
+        raise ValueError("Training target windows overlap validation features.")
+    if train_df["month"].max() + pd.DateOffset(
+        months=TARGET_HORIZON_MONTHS
+    ) >= test_df["month"].min():
+        raise ValueError("Training target windows overlap final test features.")
 
     X_train = model_train[feature_columns]
     y_train = model_train["risk_target"]
@@ -143,6 +190,10 @@ def main():
     print(
         f"Final test records: {len(test_df)}"
     )
+    print(
+        f"Purged validation-boundary months: {len(purged_months)} "
+        f"(target horizon: {TARGET_HORIZON_MONTHS} months)"
+    )
 
     print(
         f"\nModel training period:"
@@ -161,7 +212,6 @@ def main():
         f" {test_df['month'].min()}"
         f" -> {test_df['month'].max()}"
     )
-
     # --------------------------------------------------
     # Candidate models
     # --------------------------------------------------
@@ -387,6 +437,10 @@ def main():
     print(
         f"\nAccuracy: {test_accuracy:.4f}"
     )
+    print(
+        "Model selection used chronological validation only; these final-test "
+        "results are reported once and were not used to choose the model."
+    )
 
     print(
         f"Macro F1: {test_macro_f1:.4f}"
@@ -416,7 +470,8 @@ def main():
     print(
         confusion_matrix(
             y_test,
-            test_pred
+            test_pred,
+            labels=[0, 1, 2],
         )
     )
 
@@ -446,6 +501,18 @@ def main():
         model_path
     )
 
+    importance = pd.DataFrame({
+        "feature": feature_columns,
+        "importance": final_model.feature_importances_,
+    }).sort_values("importance", ascending=False)
+    importance_path = os.path.join(
+        ROOT_DIR,
+        "data",
+        "processed",
+        "feature_importance.csv"
+    )
+    importance.to_csv(importance_path, index=False)
+
     # --------------------------------------------------
     # Save validation results
     # --------------------------------------------------
@@ -473,9 +540,12 @@ def main():
     print(
         f"\nModel comparison:\n{results_path}"
     )
+    print(
+        f"\nFinal-model feature importance:\n{importance_path}"
+    )
 
     print("\n" + "=" * 70)
-    print("PHASE 2.4 COMPLETE")
+    print("PHASE 07 COMPLETE")
     print("=" * 70)
 
 

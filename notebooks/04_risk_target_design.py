@@ -1,3 +1,10 @@
+"""UdyamPulse AI | Phase 04: define a deterministic future-stress target.
+
+Inputs: raw financial history via services.data_service
+Outputs: financial_risk_dataset.csv with three-month target labels
+Method: current month t features -> stress in t+1..t+3 -> LOW/MEDIUM/HIGH.
+"""
+
 import os
 import sys
 
@@ -30,10 +37,11 @@ from services.data_service import (
 # Financial Risk Target Design
 # --------------------------------------------------
 
+# Current-month features -> next 3 months of stress -> deterministic risk label.
 def main():
 
     print("=" * 70)
-    print("UDYAMPULSE AI - PHASE 2.1")
+    print("UDYAMPULSE AI - PHASE 04")
     print("FINANCIAL RISK TARGET DESIGN")
     print("=" * 70)
 
@@ -46,6 +54,21 @@ def main():
     print("\nOriginal dataset:")
     print(f"Rows: {len(df)}")
     print(f"Businesses: {df['business_id'].nunique()}")
+    if df.duplicated(["business_id", "month"]).any():
+        raise ValueError("Duplicate business-month rows prevent a valid future horizon.")
+    month_ordinals = df["month"].dt.to_period("M").astype("int64")
+    month_steps = (
+        df.assign(_month_ordinal=month_ordinals)
+        .sort_values(["business_id", "_month_ordinal"])
+        .groupby("business_id")["_month_ordinal"]
+        .diff()
+        .dropna()
+    )
+    if not month_steps.eq(1).all():
+        raise ValueError(
+            "Risk target requires one observation per consecutive calendar month "
+            "for every business."
+        )
 
     # --------------------------------------------------
     # Create future-risk target
@@ -54,6 +77,17 @@ def main():
     target_df = create_risk_target(
         df,
         future_months=3
+    )
+    if target_df["risk_target"].isna().any():
+        raise ValueError("Risk target creation produced unlabeled records.")
+    print(
+        "Method: the mean financial indicators in months t+1, t+2, and t+3 "
+        "form the future stress target; month t is reserved for model features."
+    )
+    print(
+        "Stress rules: profit margin < 10%; cash change < -15%; revenue change "
+        "< -10%; receivables/revenue > 0.30; EMI/revenue > 0.12. "
+        "0 indicators = LOW, 1 = MEDIUM, 2+ = HIGH."
     )
 
     print("\nAfter target creation:")
@@ -237,7 +271,7 @@ def main():
         f"{output_path}"
     )
 
-    print("\nPhase 2.1 completed successfully.")
+    print("\nPhase 04 completed successfully.")
 
 
 # --------------------------------------------------

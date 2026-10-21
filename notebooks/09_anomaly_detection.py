@@ -1,3 +1,10 @@
+"""UdyamPulse AI | Phase 09: fit Isolation Forest on current financial features.
+
+Inputs: chronological ml_train.csv and ml_test.csv
+Outputs: anomaly model and test-period anomaly scores
+Method: scale on training data and score held-out records; anomaly is not distress.
+"""
+
 import os
 import sys
 
@@ -61,7 +68,7 @@ OUTPUT_DIR = os.path.join(
 def main():
 
     print("=" * 70)
-    print("UDYAMPULSE AI - PHASE 2.7")
+    print("UDYAMPULSE AI - PHASE 09")
     print("ANOMALY DETECTION")
     print("=" * 70)
 
@@ -110,6 +117,16 @@ def main():
         "cash_growth",
         "receivable_growth"
     ]
+    forbidden_features = [
+        feature for feature in anomaly_features
+        if any(term in feature.lower() for term in (
+            "future", "stress", "risk_label", "risk_target"
+        ))
+    ]
+    if forbidden_features:
+        raise ValueError(
+            f"Future/target leakage in anomaly features: {forbidden_features}"
+        )
 
     # --------------------------------------------------
     # Check features
@@ -235,6 +252,10 @@ def main():
         1: "NORMAL",
         -1: "ANOMALY"
     })
+    print(
+        "\nAnomaly means an unusual financial pattern; it does not, by itself, "
+        "mean financial distress or business failure."
+    )
 
     # --------------------------------------------------
     # Anomaly distribution
@@ -364,7 +385,7 @@ def main():
     )
 
     print("\n" + "=" * 70)
-    print("PHASE 2.7 ANOMALY DETECTION COMPLETE")
+    print("PHASE 09 ANOMALY DETECTION COMPLETE")
     print("=" * 70)
 
 

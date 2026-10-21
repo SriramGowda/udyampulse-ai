@@ -1,3 +1,10 @@
+"""UdyamPulse AI | Phase 08: explain one risk prediction with Tree SHAP.
+
+Inputs: production Random Forest and held-out ml_test.csv
+Outputs: per-record SHAP CSV and contribution chart
+Method: explain the predicted class in the production feature order.
+"""
+
 import os
 import sys
 
@@ -47,7 +54,7 @@ TEST_PATH = os.path.join(
 def main():
 
     print("=" * 70)
-    print("UDYAMPULSE AI - PHASE 2.6")
+    print("UDYAMPULSE AI - PHASE 08")
     print("SHAP EXPLAINABLE AI TEST")
     print("=" * 70)
 
@@ -63,17 +70,20 @@ def main():
         TEST_PATH
     )
 
-    excluded_columns = [
-        "business_id",
-        "month",
-        "risk_target"
-    ]
-
     feature_columns = [
-        column
-        for column in test_df.columns
-        if column not in excluded_columns
+        "employee_count", "revenue", "expenses", "cash_balance",
+        "accounts_receivable", "accounts_payable", "inventory_value",
+        "loan_emi", "loan_outstanding", "profit", "profit_margin",
+        "working_capital", "cash_ratio", "receivable_ratio",
+        "payable_ratio", "debt_service_ratio", "inventory_ratio",
+        "revenue_growth", "expense_growth", "cash_growth",
+        "receivable_growth",
     ]
+    if list(getattr(model, "feature_names_in_", feature_columns)) != feature_columns:
+        raise ValueError("Loaded model feature order does not match the production feature list.")
+    missing_features = sorted(set(feature_columns).difference(test_df.columns))
+    if missing_features:
+        raise ValueError(f"Test data is missing model features: {missing_features}")
 
     X_test = test_df[
         feature_columns
@@ -106,6 +116,8 @@ def main():
         1: "MEDIUM",
         2: "HIGH"
     }
+    class_ids = list(model.classes_)
+    prediction_index = class_ids.index(prediction)
 
     predicted_label = risk_labels[
         prediction
@@ -123,11 +135,9 @@ def main():
 
     print("\nPrediction Probabilities:")
 
-    for index, probability in enumerate(
-        probabilities
-    ):
+    for class_id, probability in zip(class_ids, probabilities):
         print(
-            f"{risk_labels[index]}: "
+            f"{risk_labels[class_id]}: "
             f"{probability * 100:.2f}%"
         )
 
@@ -141,9 +151,7 @@ def main():
         model
     )
 
-    shap_values = explainer(
-        sample
-    )
+    shap_values = explainer(sample)
 
     print("SHAP explanation generated.")
 
@@ -151,21 +159,14 @@ def main():
     # Handle SHAP output
     # --------------------------------------------------
 
-    values = shap_values.values
-
-    if values.ndim == 3:
-
-        selected_values = values[
-            0,
-            :,
-            prediction
-        ]
-
+    values = getattr(shap_values, "values", shap_values)
+    if isinstance(values, list):
+        selected_values = values[prediction_index][0]
     else:
-
-        selected_values = values[
-            0
-        ]
+        if getattr(values, "ndim", 0) == 3:
+            selected_values = values[0, :, prediction_index]
+        else:
+            selected_values = values[0]
 
     # --------------------------------------------------
     # Feature contribution table
@@ -278,7 +279,7 @@ def main():
     # --------------------------------------------------
 
     print("\n" + "=" * 70)
-    print("PHASE 2.6 SHAP TEST COMPLETE")
+    print("PHASE 08 SHAP EXPLANATION COMPLETE")
     print("=" * 70)
 
 

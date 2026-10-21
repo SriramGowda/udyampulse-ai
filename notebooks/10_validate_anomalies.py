@@ -1,3 +1,10 @@
+"""UdyamPulse AI | Phase 10: describe unusual records without calling them failures.
+
+Inputs: anomaly scores and held-out financial records
+Outputs: anomaly/normal profile comparison CSV and console diagnostics
+Method: compare flagged patterns and count repeated anomalous observations.
+"""
+
 import os
 import pandas as pd
 
@@ -40,7 +47,7 @@ TEST_PATH = os.path.join(
 def main():
 
     print("=" * 70)
-    print("UDYAMPULSE AI - PHASE 2.7")
+    print("UDYAMPULSE AI - PHASE 10")
     print("ANOMALY VALIDATION")
     print("=" * 70)
 
@@ -132,25 +139,29 @@ def main():
     # Persistent anomalies
     # --------------------------------------------------
 
-    persistent = business_counts[
+    repeated = business_counts[
         business_counts >= 3
     ]
 
     print("\n" + "=" * 70)
-    print("3. BUSINESSES WITH 3+ ANOMALOUS MONTHS")
+    print("3. BUSINESSES WITH 3+ ANOMALOUS RECORDS")
     print("=" * 70)
 
-    if len(persistent) > 0:
+    if len(repeated) > 0:
 
         print(
-            persistent.to_string()
+            repeated.to_string()
         )
 
     else:
 
         print(
-            "No business has 3 or more anomalous months."
+            "No business has 3 or more anomalous records."
         )
+    print(
+        "Repeated anomalies indicate multiple unusual observations in this "
+        "test period; they are not automatically financial distress."
+    )
 
     # --------------------------------------------------
     # Single-month anomalies

@@ -1,38 +1,46 @@
+"""UdyamPulse AI | Phase 02: explore financial summaries and distributions.
+
+Inputs: data/raw/msme_financial_data.csv
+Outputs: console summaries and offline HTML Plotly figures
+Method: production KPI calculations, monthly aggregation, and group analysis.
+"""
+
+from pathlib import Path
+import sys
+
 import pandas as pd
 import plotly.express as px
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+CHART_OUTPUT_DIR = PROJECT_ROOT / "data" / "processed" / "financial_eda"
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from services.data_service import calculate_kpis
 
 
 # --------------------------------------------------
 # Configuration
 # --------------------------------------------------
 
-DATASET_PATH = "data/raw/msme_financial_data.csv"
+DATASET_PATH = PROJECT_ROOT / "data" / "raw" / "msme_financial_data.csv"
 
 
 # --------------------------------------------------
 # Load Dataset
 # --------------------------------------------------
 
-df = pd.read_csv(
-    DATASET_PATH,
-    parse_dates=["month"]
-)
+if not DATASET_PATH.is_file():
+    raise FileNotFoundError(f"Required dataset not found: {DATASET_PATH}")
+
+df = pd.read_csv(DATASET_PATH, parse_dates=["month"])
+df = calculate_kpis(df)
+CHART_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # --------------------------------------------------
 # Basic Financial Calculations
 # --------------------------------------------------
-
-df["profit"] = (
-    df["revenue"]
-    - df["expenses"]
-)
-
-df["profit_margin"] = (
-    df["profit"]
-    / df["revenue"]
-) * 100
-
 
 # --------------------------------------------------
 # Print Header
@@ -76,17 +84,17 @@ print("-" * 50)
 
 print(
     f"Average Revenue       : "
-    f"₹{df['revenue'].mean():,.2f}"
+    f"INR {df['revenue'].mean():,.2f}"
 )
 
 print(
     f"Average Expenses      : "
-    f"₹{df['expenses'].mean():,.2f}"
+    f"INR {df['expenses'].mean():,.2f}"
 )
 
 print(
     f"Average Profit        : "
-    f"₹{df['profit'].mean():,.2f}"
+    f"INR {df['profit'].mean():,.2f}"
 )
 
 print(
@@ -96,17 +104,17 @@ print(
 
 print(
     f"Average Cash Balance  : "
-    f"₹{df['cash_balance'].mean():,.2f}"
+    f"INR {df['cash_balance'].mean():,.2f}"
 )
 
 print(
     f"Average Receivables   : "
-    f"₹{df['accounts_receivable'].mean():,.2f}"
+    f"INR {df['accounts_receivable'].mean():,.2f}"
 )
 
 print(
     f"Average Payables      : "
-    f"₹{df['accounts_payable'].mean():,.2f}"
+    f"INR {df['accounts_payable'].mean():,.2f}"
 )
 
 
@@ -225,47 +233,17 @@ correlation_matrix = (
 print(
     correlation_matrix.round(2)
 )
+print(
+    "Interpretation: profit is calculated from revenue minus expenses, so "
+    "its correlations with those two inputs are partly mechanical."
+)
 
 
 # --------------------------------------------------
 # 7. Create Charts
 # --------------------------------------------------
 
-# Revenue trend
-fig_revenue = px.line(
-    monthly,
-    x="month",
-    y="revenue",
-    markers=True,
-    title="Total Monthly Revenue"
-)
-
-fig_revenue.update_layout(
-    xaxis_title="Month",
-    yaxis_title="Revenue (₹)"
-)
-
-fig_revenue.show()
-
-
-# Expense trend
-fig_expenses = px.line(
-    monthly,
-    x="month",
-    y="expenses",
-    markers=True,
-    title="Total Monthly Expenses"
-)
-
-fig_expenses.update_layout(
-    xaxis_title="Month",
-    yaxis_title="Expenses (₹)"
-)
-
-fig_expenses.show()
-
-
-# Revenue vs Expenses
+# Revenue and expense trends in one comparable chart.
 trend_long = monthly.melt(
     id_vars="month",
     value_vars=[
@@ -287,10 +265,14 @@ fig_comparison = px.line(
 
 fig_comparison.update_layout(
     xaxis_title="Month",
-    yaxis_title="Amount (₹)"
+    yaxis_title="Amount (INR)"
 )
 
-fig_comparison.show()
+fig_comparison.write_html(
+    CHART_OUTPUT_DIR / "monthly_revenue_expenses.html",
+    include_plotlyjs="directory",
+    auto_open=False,
+)
 
 
 # Sector-wise profit
@@ -303,10 +285,14 @@ fig_sector = px.bar(
 
 fig_sector.update_layout(
     xaxis_title="Sector",
-    yaxis_title="Average Profit (₹)"
+    yaxis_title="Average Profit (INR)"
 )
 
-fig_sector.show()
+fig_sector.write_html(
+    CHART_OUTPUT_DIR / "average_profit_by_sector.html",
+    include_plotlyjs="directory",
+    auto_open=False,
+)
 
 
 # Revenue vs Expenses scatter
@@ -323,11 +309,15 @@ fig_scatter = px.scatter(
 )
 
 fig_scatter.update_layout(
-    xaxis_title="Revenue (₹)",
-    yaxis_title="Expenses (₹)"
+    xaxis_title="Revenue (INR)",
+    yaxis_title="Expenses (INR)"
 )
 
-fig_scatter.show()
+fig_scatter.write_html(
+    CHART_OUTPUT_DIR / "revenue_vs_expenses.html",
+    include_plotlyjs="directory",
+    auto_open=False,
+)
 
 
 # Cash balance trend
@@ -341,12 +331,17 @@ fig_cash = px.line(
 
 fig_cash.update_layout(
     xaxis_title="Month",
-    yaxis_title="Cash Balance (₹)"
+    yaxis_title="Cash Balance (INR)"
 )
 
-fig_cash.show()
+fig_cash.write_html(
+    CHART_OUTPUT_DIR / "cash_balance_trend.html",
+    include_plotlyjs="directory",
+    auto_open=False,
+)
 
 
 print("\n" + "=" * 70)
 print("FINANCIAL EDA COMPLETED")
+print(f"Interactive charts saved to: {CHART_OUTPUT_DIR}")
 print("=" * 70)

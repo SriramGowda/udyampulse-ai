@@ -1,3 +1,12 @@
+"""UdyamPulse AI | Phase 01: validate the raw synthetic financial dataset.
+
+Inputs: data/raw/msme_financial_data.csv
+Outputs: validation diagnostics printed to the console
+Method: schema, completeness, uniqueness, date, and financial-value checks.
+"""
+
+from pathlib import Path
+
 import pandas as pd
 
 
@@ -5,17 +14,26 @@ import pandas as pd
 # Configuration
 # --------------------------------------------------
 
-DATASET_PATH = "data/raw/msme_financial_data.csv"
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DATASET_PATH = PROJECT_ROOT / "data" / "raw" / "msme_financial_data.csv"
 
 
 # --------------------------------------------------
 # Load Dataset
 # --------------------------------------------------
 
-df = pd.read_csv(
-    DATASET_PATH,
-    parse_dates=["month"]
-)
+if not DATASET_PATH.is_file():
+    raise FileNotFoundError(f"Required dataset not found: {DATASET_PATH}")
+
+df = pd.read_csv(DATASET_PATH, parse_dates=["month"])
+required_columns = {
+    "business_id", "month", "sector", "state", "revenue", "expenses",
+    "cash_balance", "accounts_receivable", "accounts_payable",
+    "inventory_value", "loan_emi", "loan_outstanding",
+}
+missing_columns = sorted(required_columns.difference(df.columns))
+if missing_columns:
+    raise ValueError(f"Dataset is missing required columns: {missing_columns}")
 
 
 print("=" * 60)
@@ -79,6 +97,10 @@ duplicate_count = df.duplicated().sum()
 print(
     f"Duplicate rows: {duplicate_count}"
 )
+business_month_duplicates = df.duplicated(
+    ["business_id", "month"]
+).sum()
+print(f"Duplicate business-month records: {business_month_duplicates}")
 
 
 # --------------------------------------------------
@@ -137,6 +159,11 @@ print(
 
 print(
     f"End date  : {df['month'].max().date()}"
+)
+periods_per_business = df.groupby("business_id")["month"].nunique()
+print(
+    "Months per business (min/max): "
+    f"{periods_per_business.min()} / {periods_per_business.max()}"
 )
 
 
@@ -215,6 +242,10 @@ print(
 
 print(
     f"Duplicate rows: {df.duplicated().sum()}"
+)
+print(
+    f"Duplicate business-month records: "
+    f"{df.duplicated(['business_id', 'month']).sum()}"
 )
 
 print(

@@ -1,3 +1,10 @@
+"""UdyamPulse AI | Phase 05: prepare leakage-audited risk-model data.
+
+Inputs: data/processed/financial_risk_dataset.csv
+Outputs: chronological data/processed/ml_train.csv and ml_test.csv
+Method: current-month features, explicit leakage checks, and a purged time split.
+"""
+
 import os
 import sys
 
@@ -45,6 +52,8 @@ TEST_PATH = os.path.join(
     OUTPUT_DIR,
     "ml_test.csv"
 )
+
+TARGET_HORIZON_MONTHS = 3
 
 
 # --------------------------------------------------
@@ -167,7 +176,7 @@ def prepare_features(df):
 def main():
 
     print("=" * 70)
-    print("UDYAMPULSE AI - PHASE 2.2")
+    print("UDYAMPULSE AI - PHASE 05")
     print("ML TRAINING DATASET PREPARATION")
     print("=" * 70)
 
@@ -191,10 +200,15 @@ def main():
     # Prepare current financial features
     # --------------------------------------------------
 
+    rows_before_features = len(df)
     df = prepare_features(df)
 
     print("\nAfter feature preparation:")
     print(f"Rows: {len(df)}")
+    print(
+        "Rows removed because current features were unavailable/non-finite: "
+        f"{rows_before_features - len(df)}"
+    )
 
     # --------------------------------------------------
     # Define model features
@@ -281,6 +295,8 @@ def main():
 
     print("No future/target columns found in features.")
     print("STATUS: PASS")
+    if len(feature_columns) != len(set(feature_columns)):
+        raise ValueError("Feature list contains duplicate columns.")
 
     # --------------------------------------------------
     # Create model dataset
@@ -303,17 +319,31 @@ def main():
         model_df["month"].unique()
     )
 
-    split_index = int(
-        len(unique_months) * 0.80
-    )
+    if len(unique_months) < TARGET_HORIZON_MONTHS + 5:
+        raise ValueError(
+            "Not enough distinct months for an 80/20 split and a "
+            f"{TARGET_HORIZON_MONTHS}-month target embargo."
+        )
 
-    train_months = unique_months[
-        :split_index
-    ]
+    split_index = int(len(unique_months) * 0.80)
+    if split_index <= 0 or split_index >= len(unique_months):
+        raise ValueError("Unable to create non-empty chronological train/test periods.")
 
     test_months = unique_months[
         split_index:
     ]
+    test_start = pd.Timestamp(test_months[0])
+    train_cutoff = test_start - pd.DateOffset(months=TARGET_HORIZON_MONTHS)
+    train_months = [
+        month for month in unique_months[:split_index]
+        if pd.Timestamp(month) < train_cutoff
+    ]
+    purged_months = [
+        month for month in unique_months[:split_index]
+        if month not in train_months
+    ]
+    if not train_months or not test_months:
+        raise ValueError("Time split has an empty partition after target-horizon embargo.")
 
     train_df = model_df[
         model_df["month"].isin(train_months)
@@ -342,15 +372,19 @@ def main():
     print(
         f"Testing months: {len(test_months)}"
     )
+    print(
+        f"Purged training-boundary months: {len(purged_months)} "
+        f"(target horizon: {TARGET_HORIZON_MONTHS} months)"
+    )
 
     print(
         f"\nTraining period:"
-        f" {train_months[0]} → {train_months[-1]}"
+        f" {train_months[0]} to {train_months[-1]}"
     )
 
     print(
         f"Testing period:"
-        f" {test_months[0]} → {test_months[-1]}"
+        f" {test_months[0]} to {test_months[-1]}"
     )
 
     print(
@@ -376,6 +410,18 @@ def main():
         raise ValueError(
             "FAIL - Training and test periods overlap."
         )
+    latest_training_label_end = (
+        latest_train_month
+        + pd.DateOffset(months=TARGET_HORIZON_MONTHS)
+    )
+    if latest_training_label_end >= earliest_test_month:
+        raise ValueError(
+            "Target-horizon leakage detected: a training label reaches "
+            "the test feature period."
+        )
+    print(
+        "PASS - Training target windows end before the test feature period."
+    )
 
     # --------------------------------------------------
     # Class distribution
@@ -445,7 +491,7 @@ def main():
         print(f"  - {feature}")
 
     print("\n" + "=" * 70)
-    print("PHASE 2.2 DATA PREPARATION COMPLETE")
+    print("PHASE 05 DATA PREPARATION COMPLETE")
     print("=" * 70)
 
 
