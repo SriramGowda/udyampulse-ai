@@ -1,3 +1,10 @@
+"""UdyamPulse AI | Phase 11: demonstrate the production six-month forecast.
+
+Inputs: raw financial history via services.data_service
+Outputs: revenue/cash forecast and chronological MAE/RMSE holdout metrics
+Method: reuse the production damped linear trend; no future holdout trains it.
+"""
+
 import os
 import sys
 
@@ -33,7 +40,7 @@ def main():
     evaluation_df = evaluate_forecast(df, sample_business)
 
     print("=" * 70)
-    print("UDYAMPULSE AI - FORECASTING")
+    print("UDYAMPULSE AI - PHASE 11: FORECASTING")
     print("=" * 70)
 
     print(f"\nBusiness: {sample_business}")
@@ -49,7 +56,8 @@ def main():
     print(
         "This forecast is a damped linear trend based only on earlier "
         "monthly observations. Holdout MAE and RMSE provide a basic "
-        "chronological evaluation."
+        "chronological evaluation; it is an illustrative baseline, not a "
+        "guarantee of future performance."
     )
 
 

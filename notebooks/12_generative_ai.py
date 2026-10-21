@@ -1,3 +1,10 @@
+"""UdyamPulse AI | Phase 12: demonstrate production financial-summary fallback.
+
+Inputs: production KPIs and a sample business history
+Outputs: Gemini/Ollama/local-summary response printed to the console
+Method: call the provider orchestration in services.ai_service.
+"""
+
 import os
 import sys
 
@@ -14,11 +21,15 @@ if ROOT_DIR not in sys.path:
 from services.data_service import load_data, calculate_kpis
 from services.ai_service import generate_financial_summary
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 
 # --------------------------------------------------
 # Phase 4: Generative AI
 # --------------------------------------------------
 
+# Gemini -> Ollama -> deterministic local financial summary.
 
 def main():
     df = load_data()
@@ -30,7 +41,7 @@ def main():
     summary = generate_financial_summary(sample_business)
 
     print("=" * 70)
-    print("UDYAMPULSE AI - GENERATIVE AI SUMMARY")
+    print("UDYAMPULSE AI - PHASE 12: GENERATIVE AI SUMMARY")
     print("=" * 70)
 
     print(f"\nBusiness: {sample_business['business_id'].iloc[0]}")
@@ -41,7 +52,8 @@ def main():
     print("-" * 40)
     print(
         "This module generates a plain-English business explanation from the latest financial metrics. "
-        "If a Gemini API key is configured, it uses Gemini for the final wording; otherwise, it falls back to a local summary."
+        "It calls the production service, which tries Gemini, then Ollama, and finally "
+        "a deterministic local financial summary. No API key is printed."
     )
 
 

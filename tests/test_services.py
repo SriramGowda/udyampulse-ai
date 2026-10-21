@@ -15,7 +15,11 @@ from services.ai_service import (
     get_ai_status,
     retrieve_documents,
 )
-from services.data_service import evaluate_forecast, forecast_business
+from services.data_service import(
+     calculate_kpis,
+     evaluate_forecast,
+    forecast_business,
+)
 
 
 def make_history(months=24):
@@ -34,6 +38,50 @@ def make_history(months=24):
             for index in range(months)
         ],
     })
+
+
+class FinancialKpiTests(unittest.TestCase):
+    def test_kpis_follow_existing_formulas_and_handle_zero_denominators(self):
+        records = pd.DataFrame({
+            "business_id": ["DEMO", "DEMO"],
+            "month": pd.to_datetime(["2025-01-01", "2025-02-01"]),
+            "revenue": [0.0, 100.0],
+            "expenses": [0.0, 50.0],
+            "cash_balance": [-10.0, 25.0],
+            "accounts_receivable": [5.0, 20.0],
+            "accounts_payable": [2.0, 10.0],
+            "inventory_value": [3.0, 5.0],
+            "loan_emi": [1.0, 5.0],
+        })
+
+        result = calculate_kpis(records)
+        first, second = result.iloc[0], result.iloc[1]
+
+        self.assertEqual(first["profit"], 0)
+        self.assertTrue(pd.isna(first["profit_margin"]))
+        self.assertTrue(pd.isna(second["revenue_growth"]))
+        self.assertTrue(pd.isna(second["expense_growth"]))
+        self.assertTrue(pd.isna(first["cash_ratio"]))
+        self.assertTrue(pd.isna(first["receivable_ratio"]))
+        self.assertEqual(second["profit"], 50)
+        self.assertEqual(second["profit_margin"], 50)
+        self.assertEqual(second["working_capital"], 15)
+        self.assertEqual(second["cash_ratio"], 0.5)
+        self.assertEqual(second["receivable_ratio"], 0.2)
+        self.assertEqual(second["payable_ratio"], 0.2)
+        self.assertEqual(second["debt_service_ratio"], 0.05)
+        self.assertEqual(second["inventory_ratio"], 0.05)
+        for column in (
+            "profit_margin", "revenue_growth", "expense_growth", "cash_ratio",
+            "receivable_ratio", "payable_ratio", "debt_service_ratio",
+            "inventory_ratio",
+        ):
+            values = result[column].dropna().to_numpy(dtype=float)
+            self.assertTrue(
+                pd.Series(values).map(
+                    lambda value: abs(value) < float("inf")
+                ).all()
+            )
 
 
 class ForecastTests(unittest.TestCase):

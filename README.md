@@ -132,6 +132,28 @@ The safe provider status includes whether Gemini is configured (not a live servi
 - **Financial explanation:** `services/ai_service.py` tries Gemini, then Ollama; if both are unavailable it returns the existing deterministic financial analysis, explicitly identified as a non-LLM fallback.
 - **Compliance RAG:** `services/rag_service.py` preserves local TXT/MD chunking, TF-IDF vectorization and cosine-similarity retrieval. `services/ai_service.py` passes only relevant excerpts to Gemini or Ollama and returns source filenames plus retrieved excerpts. If neither model is available, retrieved passages remain usable without generation.
 
+## Reproducible notebook scripts
+
+The scripts in [`notebooks/`](./notebooks/) are numbered in execution order. Run them from the project root after installing `requirements.txt`; each script resolves project files relative to its own location. Phase 02 writes offline-capable HTML charts under `data/processed/financial_eda/`.
+
+```powershell
+python notebooks\01_eda_and_validation.py
+python notebooks\02_financial_eda.py
+python notebooks\03_kpi_engine_test.py
+python notebooks\04_risk_target_design.py
+python notebooks\05_prepare_ml_dataset.py
+python notebooks\06_train_risk_model.py
+python notebooks\07_evaluate_risk_model.py
+python notebooks\08_shap_explanation.py
+python notebooks\09_anomaly_detection.py
+python notebooks\10_validate_anomalies.py
+python notebooks\11_forecasting.py
+python notebooks\12_generative_ai.py
+python notebooks\13_rag_assistant.py
+```
+
+Phases 04–07 model a three-month future-risk horizon. Phase 05 excludes a three-month boundary gap so training-label outcomes cannot overlap validation/test feature periods; Phase 07 selects candidates on validation data and reports the final test results only after selection. Phase 12 uses the production Gemini → Ollama → deterministic-summary fallback. Phase 13 uses local TXT/MD references and clearly distinguishes retrieved excerpts from generated text.
+
 ## Tests and production build
 
 ```powershell
