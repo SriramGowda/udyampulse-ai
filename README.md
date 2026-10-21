@@ -112,7 +112,7 @@ Unknown businesses return `404`, invalid requests return validation errors, and 
 
 ## Online Gemini mode
 
-Gemini is optional. To enable online generation, configure the Gemini credential in the backend process environment or a private, Git-ignored root `.env` file. The backend uses `GEMINI_MODEL` (default `gemini-3.8-flash`). No endpoint returns credential values, and no `VITE_*` frontend variable should contain backend credentials. If Gemini has no configuration or a generation request fails, the request falls through to local Ollama generation and then the relevant local fallback. `/api/ai/status` reports configuration only; it does not make a live Gemini connectivity or credential check.
+Gemini is optional. To enable online generation, configure the Gemini credential in the backend process environment or a private, Git-ignored root `.env` file. The backend uses `GEMINI_MODEL` (default `gemini-3.5-flash-lite`). No endpoint returns credential values, and no `VITE_*` frontend variable should contain backend credentials. If Gemini has no configuration or a generation request fails, the request falls through to local Ollama generation and then the relevant local fallback. `/api/ai/status` reports configuration only; it does not make a live Gemini connectivity or credential check.
 
 ## Offline mode and local model setup
 

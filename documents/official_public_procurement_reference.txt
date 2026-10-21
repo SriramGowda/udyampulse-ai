@@ -1,0 +1,9 @@
+Public Procurement Policy for Micro and Small Enterprises (MSEs)
+
+Publisher: Ministry of Micro, Small and Medium Enterprises, Government of India.
+Official URL: https://msme.gov.in/public-procurement-policy
+Source checked: 2026-10-21
+
+Verification limitation: the official Ministry URL returned HTTP 403 during verification, so the policy text and any current amendments could not be checked. This local reference contains no verified procurement targets, eligibility conditions, exemptions, deadlines, or other policy terms.
+
+Do not infer policy details from this reference. Obtain the current official policy order, Gazette notifications, and amendments from the Ministry before answering questions about procurement requirements.

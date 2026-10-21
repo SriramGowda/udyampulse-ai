@@ -98,5 +98,7 @@ def retrieval_fallback_answer(results):
         )
     return (
         "No language model was available. The retrieved document information is shown "
-        "separately below and is not a generated explanation or advice."
+        "separately below with its source. It contains only information verified in the "
+        "excerpts; details not supported by them are not verified and should be checked "
+        "against the linked official source. This is not a generated explanation or advice."
     )

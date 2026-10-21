@@ -66,6 +66,77 @@ class ForecastTests(unittest.TestCase):
 
 
 class RetrievalTests(unittest.TestCase):
+    def test_official_msme_references_are_retrievable_and_attributed(self):
+        expected_sources = {
+            "credit guarantee institutional credit": "official_cgtmse_reference.txt",
+            "Udyam registration private agency": "official_udyam_registration_reference.txt",
+            "PMEGP scheme guidelines": "official_pmegp_reference.txt",
+            "public procurement policy MSE": "official_public_procurement_reference.txt",
+        }
+
+        for question, source in expected_sources.items():
+            with self.subTest(question=question):
+                results = retrieve_documents(question)
+                self.assertTrue(results)
+                self.assertEqual(results[0]["source"], source)
+                reference = Path(__file__).resolve().parent.parent / "documents" / source
+                content = reference.read_text(encoding="utf-8")
+                self.assertIn("Publisher:", content)
+                self.assertIn("Official URL: https://", content)
+                verification_label = (
+                    "Source checked"
+                    if source in {
+                        "official_pmegp_reference.txt",
+                        "official_public_procurement_reference.txt",
+                    }
+                    else "Last verified"
+                )
+                self.assertIn(f"{verification_label}: 2026-10-21", content)
+
+    def test_unavailable_scheme_details_are_not_fabricated_or_generated(self):
+        with (
+            patch.dict(os.environ, {"GEMINI_API_KEY": "test-key"}),
+            patch(
+                "services.ai_service._generate_gemini",
+                return_value="The local reference does not verify these details "
+                "[official_pmegp_reference.txt].",
+            ) as gemini,
+            patch("services.ai_service.generate_local_response") as local,
+        ):
+            result = generate_rag_answer(
+                "What is the PMEGP subsidy amount and application deadline?"
+            )
+
+        self.assertEqual(result["provider"], "gemini")
+        self.assertIn("official_pmegp_reference.txt", result["sources"])
+        self.assertIn("official_pmegp_reference.txt", result["answer"])
+        prompt = gemini.call_args.args[0]
+        self.assertIn("not available in the excerpts", prompt)
+        self.assertIn("official_pmegp_reference.txt", prompt)
+        local.assert_not_called()
+
+    def test_unsupported_question_returns_no_local_source_or_generated_answer(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            Path(temp_dir, "source.txt").write_text(
+                "Udyam registration is handled on the official portal.",
+                encoding="utf-8",
+            )
+            with (
+                patch.dict(os.environ, {"GEMINI_API_KEY": "test-key"}),
+                patch("services.ai_service._generate_gemini") as gemini,
+                patch("services.ai_service.generate_local_response") as local,
+            ):
+                result = generate_rag_answer(
+                    "Explain international space launch vehicle propellants.",
+                    doc_dir=temp_dir,
+                )
+
+        self.assertEqual(result["provider"], "retrieval_fallback")
+        self.assertEqual(result["sources"], [])
+        self.assertIn("No relevant content was found", result["answer"])
+        gemini.assert_not_called()
+        local.assert_not_called()
+
     def test_retrieval_ranks_chunks_and_local_fallback_cites_source(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             reference = Path(temp_dir) / "working-capital.txt"
@@ -256,15 +327,150 @@ class RetrievalTests(unittest.TestCase):
         response = Mock(text="Gemini explanation")
         client = Mock()
         client.models.generate_content.return_value = response
-        with patch("google.genai.Client", return_value=client):
-            answer = _generate_gemini("Explain these metrics", api_key="demo-key")
+        with patch.dict(os.environ):
+            os.environ.pop("GEMINI_MODEL", None)
+            with patch("google.genai.Client", return_value=client) as genai_client:
+                answer = _generate_gemini(
+                    "Explain these metrics", api_key="demo-key"
+                )
 
         self.assertEqual(answer, "Gemini explanation")
+        self.assertEqual(
+            genai_client.call_args.kwargs["http_options"].timeout,
+            10_000,
+        )
         client.models.generate_content.assert_called_once()
         self.assertEqual(
             client.models.generate_content.call_args.kwargs["model"],
-            os.getenv("GEMINI_MODEL", "gemini-3.8-flash"),
+            "gemini-3.5-flash-lite",
         )
+
+    def test_gemini_failure_logs_safe_status_classification(self):
+        for status_code, category in (
+            (429, "rate_limited"),
+            (503, "service_unavailable"),
+            (504, "gateway_timeout"),
+            (500, "other"),
+        ):
+            with self.subTest(status_code=status_code):
+                error = RuntimeError("sensitive exception message")
+                error.code = status_code
+                client = Mock()
+                client.models.generate_content.side_effect = error
+
+                with (
+                    patch("google.genai.Client", return_value=client),
+                    patch("services.ai_service.GEMINI_MAX_RETRIES", 0),
+                    patch("services.ai_service.LOGGER.warning") as warning,
+                ):
+                    self.assertIsNone(
+                        _generate_gemini("sensitive prompt", api_key="demo-key")
+                    )
+
+                message, exception_class, logged_status, logged_category = (
+                    warning.call_args.args
+                )
+                self.assertIn("Gemini request failed; using local fallback", message)
+                self.assertEqual(exception_class, "RuntimeError")
+                self.assertEqual(logged_status, status_code)
+                self.assertEqual(logged_category, category)
+                self.assertNotIn("sensitive", " ".join(map(str, warning.call_args.args)))
+
+    def test_gemini_failure_logs_unknown_for_missing_or_invalid_status(self):
+        for status_code in (None, "503", True, 99, 600):
+            with self.subTest(status_code=status_code):
+                error = RuntimeError("sensitive exception message")
+                if status_code is not None:
+                    error.code = status_code
+                client = Mock()
+                client.models.generate_content.side_effect = error
+
+                with (
+                    patch("google.genai.Client", return_value=client),
+                    patch("services.ai_service.GEMINI_MAX_RETRIES", 0),
+                    patch("services.ai_service.LOGGER.warning") as warning,
+                ):
+                    self.assertIsNone(
+                        _generate_gemini("sensitive prompt", api_key="demo-key")
+                    )
+
+                _, exception_class, logged_status, logged_category = (
+                    warning.call_args.args
+                )
+                self.assertEqual(exception_class, "RuntimeError")
+                self.assertEqual(logged_status, "unknown")
+                self.assertEqual(logged_category, "unknown")
+
+    def test_transient_gemini_error_retries_once_after_server_delay(self):
+        error = RuntimeError("test error")
+        error.code = 503
+        error.details = {
+            "error": {
+                "details": [{
+                    "@type": "type.googleapis.com/google.rpc.RetryInfo",
+                    "retryDelay": "1.25s",
+                }],
+            },
+        }
+        client = Mock()
+        client.models.generate_content.side_effect = [
+            error,
+            Mock(text="Gemini explanation"),
+        ]
+
+        with (
+            patch("google.genai.Client", return_value=client),
+            patch("services.ai_service.time.sleep") as sleep,
+        ):
+            answer = _generate_gemini("Explain these metrics", api_key="demo-key")
+
+        self.assertEqual(answer, "Gemini explanation")
+        self.assertEqual(client.models.generate_content.call_count, 2)
+        sleep.assert_called_once_with(1.25)
+
+    def test_transient_gemini_error_respects_retry_after_header(self):
+        error = RuntimeError("test error")
+        error.code = 429
+        error.response = Mock(headers={"Retry-After": "0.75"})
+        client = Mock()
+        client.models.generate_content.side_effect = [
+            error,
+            Mock(text="Gemini explanation"),
+        ]
+
+        with (
+            patch("google.genai.Client", return_value=client),
+            patch("services.ai_service.time.sleep") as sleep,
+        ):
+            answer = _generate_gemini("Explain these metrics", api_key="demo-key")
+
+        self.assertEqual(answer, "Gemini explanation")
+        self.assertEqual(client.models.generate_content.call_count, 2)
+        sleep.assert_called_once_with(0.75)
+
+    def test_transient_gemini_error_with_long_delay_falls_back_without_retry(self):
+        error = RuntimeError("test error")
+        error.code = 429
+        error.details = {
+            "error": {
+                "details": [{
+                    "@type": "type.googleapis.com/google.rpc.RetryInfo",
+                    "retryDelay": "30s",
+                }],
+            },
+        }
+        client = Mock()
+        client.models.generate_content.side_effect = error
+
+        with (
+            patch("google.genai.Client", return_value=client),
+            patch("services.ai_service.time.sleep") as sleep,
+        ):
+            answer = _generate_gemini("Explain these metrics", api_key="demo-key")
+
+        self.assertIsNone(answer)
+        client.models.generate_content.assert_called_once()
+        sleep.assert_not_called()
 
 
 if __name__ == "__main__":
